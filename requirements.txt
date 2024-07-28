@@ -1,0 +1,8 @@
+groq 
+pydub 
+langchain 
+pinecone-client 
+langchain-community 
+langchain_pinecone
+streamlit
+audio-recorder-streamlit
