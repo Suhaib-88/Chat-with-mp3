@@ -1,6 +1,7 @@
 import streamlit as st
 from audio_recorder_streamlit import audio_recorder
 from groq import Groq
+import os
 
 def audio_to_text(filepath,client,model):
     with open(filepath, "rb") as file:
@@ -10,14 +11,27 @@ def audio_to_text(filepath,client,model):
         )
     return transcriptions.text
 
+def save_uploadedfile(uploadedfile,directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    with open(os.path.join(directory,uploadedfile.name),'wb') as f:
+        f.write(uploadedfile.getbuffer())
+
+    return st.success(f"Saved File: {uploadedfile.name}")
 
 
-def transcript_chat_completion(client, transcript):
+def transcript_chat_completion(client, transcript, user_query):
     chat_completion = client.chat.completions.create(
         messages=[
             {
+                "role": "system",
+                "content": '''
+                use this transcript or transcripts to answer any user questions, citing any specific quotes {transcript}
+                '''.format(transcript=transcript),
+            }
+            ,{
                 "role": "user",
-                "content": transcript,
+                "content": user_query,
             }
         ],
         model="llama3-8b-8192",
@@ -29,29 +43,36 @@ def transcript_chat_completion(client, transcript):
 def main():
     st.sidebar.title("API key config")
     api_key= st.sidebar.text_input("Enter your Api key",type='password')
-    st.title("AI Voice assistant")
-    st.write("This is a simple voice assistant that can perform various tasks")
+    st.title("Chat with MP3 audio files")
+    st.write("This is an streamlit  application that can interact with mp3 audio files")
 
 
     if api_key:
         try:
+            with st.sidebar:
+                st.success(f"API key successfully set ✅")
             client = Groq(api_key = api_key)
             whisper_model = 'whisper-large-v3'
-            recorded_audio= audio_recorder()
-            if recorded_audio:
-                audiofile='audio_file.mp3'
-                with open(audiofile,'wb') as f:
-                    f.write(recorded_audio)
-
-                translation_text = audio_to_text(audiofile, client=client,model=whisper_model)
+            uploaded_audio= st.file_uploader('upload mp3 files',type=['mp3'])
+            if uploaded_audio is not None:
+                save_uploadedfile(uploaded_audio,"audio_files")
+                translation_text = audio_to_text(filepath=os.path.join("audio_files", uploaded_audio.name), client=client,model=whisper_model)
+                prompt= st.chat_input('Chat with audio files')
                 with st.chat_message('user'):
                     st.write("Transcription: ", translation_text)
                 
                 with st.chat_message('assistant'):
-                    ai_response=transcript_chat_completion(client, translation_text)
-                    st.write(ai_response)
+                    if prompt is not None:
+                        ai_response=transcript_chat_completion(client, translation_text,prompt)
+                        st.write(ai_response)
+                    else:
+                        st.info("We are ready, Please start your conversation")
+            
+            else:
+                 st.info("Please upload the MP3 audio files first 🎵")
+
         except Exception as e:
-            st.error("Error: ", e)
+            st.error(f"Error: {e}")
 
     else:
         st.error("Set your API token first 🚩")
